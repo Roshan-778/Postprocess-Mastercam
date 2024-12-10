@@ -75,7 +75,7 @@ def modify_nc_file(input_nc_path):
         output_file.writelines(lines)
 
     # Handle conflicts for renaming final_output_path
-    final_output_path = output_file_path.replace(" Original", " diff")
+    final_output_path = output_file_path.replace(" Original", " Roshed")
     if os.path.exists(final_output_path):
         base, ext = os.path.splitext(final_output_path)
         counter = 1
