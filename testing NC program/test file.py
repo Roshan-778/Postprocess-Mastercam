@@ -1,14 +1,20 @@
-import streamlit as st
-def modify_nc_file(input_nc_path):
-    import re
-    import os
+import re
+import os
 
+# gets and checks Input path exist's 
+input_nc_path = input("Please give me your input file path: ").strip('"')  # Replace with your input file path
+if os.path.exists(input_nc_path):
+    if os.path.isfile(input_nc_path):
+        print(f"The file '{input_nc_path}' exists. Finalizing now...")
+
+def modify_nc_file(input_nc_path): 
     # Extract the filename without extension to use as the "O" number
     file_name = os.path.splitext(os.path.basename(input_nc_path))[0]
     file_type = os.path.splitext(os.path.basename(input_nc_path))[1]
+    file_name = file_name + " Original"
+    file_type = file_type.replace(".NC", ".txt")
+    print(f"Input file has been renamed {file_name}{file_type}")
     
-    tool_numbers = set()  # Use a set to store unique tool numbers
-
     with open(input_nc_path, 'r') as file:
         lines = file.readlines()
 
@@ -17,15 +23,12 @@ def modify_nc_file(input_nc_path):
         lines[1] = re.sub(r'O\d+', f'O{file_name}', lines[1])  # Replace O number with the file name
 
     # Step 2a: Find the line with the last "M6" and extract the tool number
-    file_name = file_name + " Original"
     last_m6_tool_number = None
     for i in range(len(lines) - 1, -1, -1):  # Iterate backward through the lines
         if "M6" in lines[i]:
             match = re.search(r'T(\d+)', lines[i])  # Extract the tool number (e.g., T3)
             if match:
-                tool_number = int(match.group(1))
-                tool_numbers.add(tool_number)  # Add to the set of tool numbers
-                last_m6_tool_number = tool_number
+                last_m6_tool_number = int(match.group(1))
             break
 
     # Step 2b: Replace the last "H0" with H[last_tool_number] and update Z value
@@ -40,50 +43,46 @@ def modify_nc_file(input_nc_path):
 
     # Step 2c: Modify the next line's X and Y values
     if last_h0_index is not None and last_h0_index + 1 < len(lines):
-        lines[last_h0_index + 1] = re.sub(r'X[\d.-]+', 'X-11.', lines[last_h0_index + 1])  # Update X to -14.5
-        lines[last_h0_index + 1] = re.sub(r'Y[\d.-]+', 'Y9.', lines[last_h0_index + 1])  # Update Y to 12.
+        lines[last_h0_index + 1] = re.sub(r'X[\d.-]+', 'X-14.5', lines[last_h0_index + 1])  # Update X to -14.5
+        lines[last_h0_index + 1] = re.sub(r'Y[\d.-]+', 'Y12.', lines[last_h0_index + 1])  # Update Y to 12.
+
+    # Step 3a: Delete all other lines containing H0 (after handling Step 2a)
+    lines = [line for idx, line in enumerate(lines) if 'H0' not in line or idx == last_h0_index]
 
     # Step 3b: Ensure all M6 callouts are followed by the correct H offset
     for j in range(len(lines)):
         if "M6" in lines[j]:
+            # Find the tool number in the M6 line (e.g., T3 M6)
             match = re.search(r'T(\d+)', lines[j])  # Look for T#
             if match:
                 tool_number = int(match.group(1))  # Extract the tool number as an integer
-                tool_numbers.add(tool_number)  # Add to the set of tool numbers
+
+                # Skip processing if the tool number matches the last "M6" tool number
                 if tool_number == last_m6_tool_number:
                     continue
+
+                # Check if the tool number is 1, and if so, set it to 5
                 if tool_number == 1:
-                    tool_number_minus_one = last_m6_tool_number
+                    tool_number_minus_one = 5
                 else:
-                    tool_number_minus_one = tool_number - 1
+                    tool_number_minus_one = tool_number - 1  # Subtract 1 from the tool number
+
+                # Check if the next line already contains the correct H offset
                 if j + 1 < len(lines) and f'H{tool_number}' not in lines[j + 1]:
+                    # Add a new line with T[tool_number_minus_one]
                     lines.insert(j + 1, f'N{int(lines[j].split()[0][1:]) + 5} T{tool_number_minus_one}\n')
 
-    print("All M6 callouts are followed by an H")
-    print("Your file has been Roshed YAY!")
-
-    # Sort and print the tool numbers
-    tool_numbers = sorted(tool_numbers)  # Sort tool numbers
-    print("Tool Numbers Found:", tool_numbers)
-
+    
     output_file_path = os.path.join(os.path.dirname(input_nc_path), f"{file_name}{file_type}")
-    if os.path.exists(output_file_path):
-        base, ext = os.path.splitext(output_file_path)
-        counter = 1
-        while os.path.exists(f"{base}_{counter}{ext}"):
-            counter += 1
-        output_file_path = f"{base}_{counter}{ext}"
-
     with open(output_file_path, "w") as output_file:
         output_file.writelines(lines)
+    print(f"Modified file saved to: {output_file_path}")
+    #renameing the modified file
+    output_file_path = output_file_path.replace(" Original", "")
+    print(f"{output_file_path}")
+    html_link = f'<a href="file:///{output_file_path}" target="_blank">Click here to open the file</a>'
+    print(html_link)
 
-    final_output_path = output_file_path.replace(" Original", " Roshed")
-    if os.path.exists(final_output_path):
-        base, ext = os.path.splitext(final_output_path)
-        counter = 1
-        while os.path.exists(f"{base}_{counter}{ext}"):
-            counter += 1
-        final_output_path = f"{base}_{counter}{ext}"
+# Call the function
+modify_nc_file(input_nc_path)
 
-    os.rename(output_file_path, final_output_path)
-    return tool_numbers, final_output_path
